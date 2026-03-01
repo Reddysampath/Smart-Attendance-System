@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | Smart Attendance</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <nav class="nav">
+        <h2>Attendance AI</h2>
+        <div class="nav-links">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="register.html">Register Student</a>
+            <a href="attendance_mark.html">Mark Attendance</a>
+            <a href="#" id="logout-btn">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Admin Dashboard</h1>
+
+        <div class="dashboard-grid">
+            <div class="glass-card stat-card">
+                <p>Total Students</p>
+                <div class="stat-value" id="total-students">0</div>
+            </div>
+            <div class="glass-card stat-card">
+                <p>Present Today</p>
+                <div class="stat-value" id="present-today">0</div>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 3rem;">Attendance Log</h3>
+        <div class="glass-card" style="padding: 1.5rem; margin-top: 1rem;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr
+                        style="text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--border-color);">
+                        <th style="padding: 1rem;">Student Name</th>
+                        <th style="padding: 1rem;">Roll Number</th>
+                        <th style="padding: 1rem;">Time</th>
+                        <th style="padding: 1rem;">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="attendance-list">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        if (!localStorage.getItem('token')) {
+            window.location.href = 'index.html';
+        }
+
+        async function loadDashboard() {
+            const token = localStorage.getItem('token');
+            try {
+                // Fetch Students
+                const sResp = await fetch('/api/students', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const students = await sResp.json();
+                document.getElementById('total-students').innerText = students.length;
+
+                // Fetch Attendance
+                const today = new Date().toISOString().split('T')[0];
+                const aResp = await fetch(`/api/attendance/daily?date=${today}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const attendance = await aResp.json();
+                document.getElementById('present-today').innerText = attendance.length;
+
+                const list = document.getElementById('attendance-list');
+                attendance.forEach(item => {
+                    const row = `
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <td style="padding: 1rem;">${item.student.name}</td>
+                            <td style="padding: 1rem;">${item.student.rollNumber}</td>
+                            <td style="padding: 1rem;">${new Date(item.timestamp).toLocaleTimeString()}</td>
+                            <td style="padding: 1rem;"><span style="color: #4ade80;">${item.status}</span></td>
+                        </tr>
+                    `;
+                    list.innerHTML += row;
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            localStorage.removeItem('token');
+            window.location.href = 'index.html';
+        });
+
+        loadDashboard();
+    </script>
+</body>
+
+</html>

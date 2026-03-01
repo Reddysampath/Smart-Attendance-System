@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register Student | Smart Attendance</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+</head>
+
+<body>
+    <nav class="nav">
+        <h2>Attendance AI</h2>
+        <div class="nav-links">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="register.html">Register Student</a>
+            <a href="#" id="logout-btn">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Student Registration</h1>
+        <div class="dashboard-grid">
+            <div class="glass-card" style="padding: 2rem;">
+                <form id="reg-form">
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Roll Number</label>
+                        <input type="text" id="roll" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Department</label>
+                        <input type="text" id="dept" required>
+                    </div>
+                    <button type="button" id="capture-btn" disabled>Wait for Camera...</button>
+                    <button type="submit" id="submit-btn" style="display: none; margin-top: 1rem;">Complete
+                        Registration</button>
+                </form>
+                <p id="status" style="margin-top: 1rem; color: var(--text-muted);">Initializing face detection...</p>
+            </div>
+
+            <div class="glass-card" style="padding: 1rem;">
+                <div id="camera-container">
+                    <video id="video" autoplay muted></video>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const captureBtn = document.getElementById('capture-btn');
+        const submitBtn = document.getElementById('submit-btn');
+        const status = document.getElementById('status');
+        let faceDescriptor = null;
+
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
+            video.srcObject = stream;
+
+            // Load Models from face-api.js CDN
+            const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+
+            status.innerText = 'Camera Ready. Frame your face.';
+            captureBtn.disabled = false;
+            captureBtn.innerText = 'Capture Face';
+        }
+
+        captureBtn.addEventListener('click', async () => {
+            status.innerText = 'Capturing... Stay still.';
+            const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+            if (detections) {
+                faceDescriptor = Array.from(detections.descriptor);
+                status.innerText = 'Face captured successfully!';
+                status.style.color = '#4ade80';
+                captureBtn.style.display = 'none';
+                submitBtn.style.display = 'block';
+            } else {
+                status.innerText = 'Face not detected. Try again.';
+                status.style.color = '#ef4444';
+            }
+        });
+
+        document.getElementById('reg-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                name: document.getElementById('name').value,
+                rollNumber: document.getElementById('roll').value,
+                department: document.getElementById('dept').value,
+                faceDescriptor: JSON.stringify(faceDescriptor)
+            };
+
+            const token = localStorage.getItem('token');
+            const resp = await fetch('/api/students/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (resp.ok) {
+                alert('Student registered!');
+                window.location.href = 'dashboard.html';
+            }
+        });
+
+        setupCamera();
+    </script>
+</body>
+
+</html>

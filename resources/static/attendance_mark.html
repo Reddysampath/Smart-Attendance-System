@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mark Attendance | Smart Attendance</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+</head>
+
+<body>
+    <div class="container" style="text-align: center; position: relative;">
+        <button onclick="window.history.back()"
+            style="position: absolute; top: 1rem; left: 1rem; padding: 0.5rem 1rem; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; transition: all 0.3s ease;">
+            &larr; Back
+        </button>
+        <h1>Daily Attendance</h1>
+        <p style="color: var(--text-muted); margin-bottom: 2rem;">Show your face to the camera to mark present</p>
+
+        <div id="camera-container" class="glass-card" style="padding: 1rem; max-width: 800px;">
+            <video id="video" autoplay muted></video>
+            <div id="overlay-status" style="margin-top: 1rem; font-size: 1.2rem; font-weight: bold;">Initializing...
+            </div>
+        </div>
+
+        <div style="margin-top: 2rem;">
+            <a href="index.html" style="color: var(--text-muted); text-decoration: none;">Admin Login</a>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const overlay = document.getElementById('overlay-status');
+        let labeledDescriptors = [];
+
+        async function init() {
+            // Load Models
+            const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+
+            // Fetch all students to compare descriptors
+            const resp = await fetch('/api/students');
+            const students = await resp.json();
+
+            labeledDescriptors = students.map(s => {
+                const desc = new Float32Array(JSON.parse(s.faceDescriptor));
+                return { id: s.id, name: s.name, descriptor: desc };
+            });
+
+            const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
+            video.srcObject = stream;
+            overlay.innerText = 'Scanning...';
+
+            setInterval(recognizeFace, 2000);
+        }
+
+        async function recognizeFace() {
+            const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+            if (detection) {
+                let bestMatch = { id: null, distance: 1.0, name: 'Unknown' };
+
+                // Compare with each registered student descriptor
+                for (const student of labeledDescriptors) {
+                    const distance = faceapi.euclideanDistance(detection.descriptor, student.descriptor);
+                    if (distance < 0.45 && distance < bestMatch.distance) {
+                        bestMatch = { id: student.id, distance, name: student.name };
+                    }
+                }
+
+                if (bestMatch.id) {
+                    overlay.innerText = `Matched: ${bestMatch.name}`;
+                    overlay.style.color = '#4ade80';
+                    markAttendance(bestMatch.id);
+                } else {
+                    overlay.innerText = 'Face not recognized';
+                    overlay.style.color = '#ef4444';
+                }
+            }
+        }
+
+        async function markAttendance(studentId) {
+            try {
+                const resp = await fetch('/api/attendance/mark', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentId, status: 'PRESENT' })
+                });
+                if (resp.ok) {
+                    setTimeout(() => {
+                        overlay.innerText = 'Attendance Marked!';
+                        overlay.style.color = '#4ade80';
+                    }, 500);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
